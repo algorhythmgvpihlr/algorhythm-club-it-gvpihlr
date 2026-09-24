@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  role         String   @default("CONTENT_ADMIN") // SUPER_ADMIN, CONTENT_ADMIN
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model TeamMember {
+  id           String   @id @default(cuid())
+  name         String
+  rollNumber   String?
+  branch       String?
+  position     String
+  category     String   // FOUNDER, BOARD_24_26, BOARD_26_27, VOLUNTEER, FACULTY
+  academicYear String?
+  designation  String?  // For faculty
+  photoUrl     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Event {
+  id                  String       @id @default(cuid())
+  title               String
+  slug                String       @unique
+  startDate           DateTime
+  endDate             DateTime?
+  shortOverview       String
+  detailedDescription String
+  coverImage          String?
+  status              String       @default("UPCOMING") // UPCOMING, ONGOING, COMPLETED
+  registrationStatus  String       @default("NOT_AVAILABLE") // NOT_AVAILABLE, COMING_SOON, OPEN, CLOSED
+  googleFormUrl       String?
+  images              EventImage[]
+  certificates        Certificate[]
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+}
+
+model EventImage {
+  id        String   @id @default(cuid())
+  eventId   String
+  url       String
+  order     Int      @default(0)
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Magazine {
+  id         String   @id @default(cuid())
+  title      String
+  month      String
+  year       String
+  coverImage String?
+  pdfUrl     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model WebsiteSettings {
+  id           String   @id @default(cuid())
+  clubName     String   @default("AlgoRhythm Club")
+  description  String   @default("Technical Club of IT Department, GVPIHLR")
+  whatsappUrl  String?
+  instagramUrl String?
+  linkedinUrl  String?
+  footerText   String   @default("© 2026 AlgoRhythm Club, GVPIHLR")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Certificate {
+  id               String   @id @default(cuid())
+  eventId          String
+  rollNumber       String
+  fileName         String
+  storageKey       String   @unique
+  originalFileName String
+  mimeType         String
+  fileSize         Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, rollNumber])
+}

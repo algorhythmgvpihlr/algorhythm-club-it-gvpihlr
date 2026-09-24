@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AlgoRhythm Club - Website & CMS
 
-## Getting Started
+A complete production-quality full-stack website and content management system for the AlgoRhythm Club of GVPIHLR.
 
-First, run the development server:
+## 🚀 Features
 
+- **Public Website**: Modern, responsive, dark luxury-tech theme featuring Home, About, Team, Events, and Magazines.
+- **Admin Panel (CMS)**: Secure backend dashboard to manage all website content.
+- **Authentication**: Role-based access control (Super Admin, Content Admin) using NextAuth.
+- **File Uploads**: Local file storage abstraction for images and PDFs.
+- **Dynamic Content**: Event registrations via Google Forms, categorized team members, and PDF magazine viewer.
+
+## 🛠 Tech Stack
+
+- **Framework**: Next.js 14+ (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS v4, Framer Motion, shadcn/ui, Lucide Icons
+- **Database ORM**: Prisma
+- **Database**: SQLite (Configured for frictionless local development. Easily switchable to PostgreSQL).
+- **Auth**: NextAuth.js (Auth.js) with bcrypt password hashing
+
+## 📂 Project Structure
+
+- `/src/app/(public)`: All public-facing routes (Home, Events, Team, etc.)
+- `/src/app/admin`: Secure admin dashboard and CRUD forms
+- `/src/app/api`: API routes including NextAuth and file upload handler
+- `/src/app/actions`: Server Actions for database mutations
+- `/src/components`: Reusable UI components (shadcn)
+- `/src/lib`: Utilities (prisma client, auth config)
+- `/prisma`: Database schema and seed script
+- `/public/uploads`: Directory where local files (images, PDFs) are saved
+
+## 💻 Local Development Setup
+
+Follow these steps to run the application entirely locally:
+
+### 1. Install Dependencies
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Environment Variables
+Create a `.env` file (or copy from `.env.example`):
+```env
+DATABASE_URL="file:./dev.db"
+AUTH_SECRET="your-super-secret-auth-key-for-development"
+```
+*(Note: To use PostgreSQL, change the DB URL to a postgres connection string and update `provider = "postgresql"` in `prisma/schema.prisma`)*
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Database Migration
+```bash
+npx prisma db push
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. Seed the Database
+Populates the database with the admin user and sample data.
+```bash
+npm run seed
+```
 
-## Learn More
+### 5. Start Development Server
+```bash
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Visit `http://localhost:3000` to view the public website.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🔐 Admin Login
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Navigate to `http://localhost:3000/admin/login`
 
-## Deploy on Vercel
+**Credentials** (created by the seed script):
+- **Email**: `admin@algorhythm.com`
+- **Password**: `admin123`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📦 File Storage
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Currently, the application uses local file storage:
+- Files are uploaded via `/api/upload`
+- Stored physically in `/public/uploads/...`
+- **Future Cloud Integration**: To integrate AWS S3, Cloudinary, or Supabase Storage, modify the POST logic inside `src/app/api/upload/route.ts` to push the buffer to your cloud provider and return the cloud URL. The database only stores the returned URL string, meaning no schema changes are required for cloud storage migration.
+
+## 🚀 Deployment Recommendations
+
+When deploying to production (e.g., Vercel, Railway, Render):
+1. Change `provider` in `schema.prisma` from `"sqlite"` to `"postgresql"`.
+2. Run `npx prisma migrate dev` to generate postgres migrations.
+3. Replace the `DATABASE_URL` with your production Postgres URL.
+4. Replace `AUTH_SECRET` with a strong cryptographic string.
+5. Implement a cloud storage provider (Vercel does not support persistent local storage in `public/` directory).
