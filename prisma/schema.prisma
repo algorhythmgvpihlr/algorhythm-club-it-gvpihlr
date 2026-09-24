@@ -3,55 +3,55 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id           String   @id @default(cuid())
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
   email        String   @unique
   passwordHash String
   name         String?
-  role         String   @default("CONTENT_ADMIN") // SUPER_ADMIN, CONTENT_ADMIN
+  role         String   @default("CONTENT_ADMIN")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
 
 model TeamMember {
-  id           String   @id @default(cuid())
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
   name         String
   rollNumber   String?
   branch       String?
   position     String
-  category     String   // FOUNDER, BOARD_24_26, BOARD_26_27, VOLUNTEER, FACULTY
+  category     String
   academicYear String?
-  designation  String?  // For faculty
+  designation  String?
   photoUrl     String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
 
 model Event {
-  id                  String       @id @default(cuid())
+  id                  String        @id @default(auto()) @map("_id") @db.ObjectId
   title               String
-  slug                String       @unique
+  slug                String        @unique
   startDate           DateTime
   endDate             DateTime?
   shortOverview       String
   detailedDescription String
   coverImage          String?
-  status              String       @default("UPCOMING") // UPCOMING, ONGOING, COMPLETED
-  registrationStatus  String       @default("NOT_AVAILABLE") // NOT_AVAILABLE, COMING_SOON, OPEN, CLOSED
+  status              String        @default("UPCOMING")
+  registrationStatus  String        @default("NOT_AVAILABLE")
   googleFormUrl       String?
   images              EventImage[]
   certificates        Certificate[]
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 }
 
 model EventImage {
-  id        String   @id @default(cuid())
-  eventId   String
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  eventId   String   @db.ObjectId
   url       String
   order     Int      @default(0)
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -59,7 +59,7 @@ model EventImage {
 }
 
 model Magazine {
-  id         String   @id @default(cuid())
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
   title      String
   month      String
   year       String
@@ -70,7 +70,7 @@ model Magazine {
 }
 
 model WebsiteSettings {
-  id           String   @id @default(cuid())
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
   clubName     String   @default("AlgoRhythm Club")
   description  String   @default("Technical Club of IT Department, GVPIHLR")
   whatsappUrl  String?
@@ -82,18 +82,17 @@ model WebsiteSettings {
 }
 
 model Certificate {
-  id               String   @id @default(cuid())
-  eventId          String
-  rollNumber       String
-  fileName         String
-  storageKey       String   @unique
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  eventId         String   @db.ObjectId
+  rollNumber      String
+  fileName        String
+  storageKey      String   @unique
   originalFileName String
-  mimeType         String
-  fileSize         Int
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  mimeType        String
+  fileSize        Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, rollNumber])
 }
