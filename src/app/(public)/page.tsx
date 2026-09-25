@@ -17,10 +17,15 @@ function getDriveFileId(url?: string | null) {
   try {
     const parsed = new URL(url);
 
+    // Handles:
+    // https://drive.google.com/uc?export=view&id=FILE_ID
+    // https://drive.google.com/thumbnail?id=FILE_ID
     const id = parsed.searchParams.get("id");
 
     if (id) return id;
 
+    // Handles:
+    // https://drive.google.com/file/d/FILE_ID/view
     const match = parsed.pathname.match(/\/file\/d\/([^/]+)/);
 
     return match?.[1] ?? null;
@@ -457,22 +462,29 @@ export default async function HomePage() {
 
                 <div className="pt-4">
 
-                  <a
-                    href={
-                      getMediaUrl(latestMagazine.pdfUrl) ||
-                      latestMagazine.pdfUrl
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Button
-                      size="lg"
-                      className="bg-tech-violet hover:bg-tech-violet/90 text-white gap-2"
-                    >
-                      <BookOpen size={20} />
-                      Read Magazine
-                    </Button>
-                  </a>
+                  {(() => {
+                    const pdfFileId = getDriveFileId(latestMagazine.pdfUrl);
+
+                    const pdfPreviewUrl = pdfFileId
+                      ? `https://drive.google.com/file/d/${pdfFileId}/preview`
+                      : latestMagazine.pdfUrl;
+
+                    return pdfPreviewUrl ? (
+                      <a
+                        href={pdfPreviewUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Button
+                          size="lg"
+                          className="bg-tech-violet hover:bg-tech-violet/90 text-white gap-2"
+                        >
+                          <BookOpen size={20} />
+                          Read Magazine
+                        </Button>
+                      </a>
+                    ) : null;
+                  })()}
 
                 </div>
               </div>
