@@ -11,6 +11,7 @@ const settingsSchema = z.object({
   whatsappUrl: z.string().optional().nullable(),
   instagramUrl: z.string().optional().nullable(),
   linkedinUrl: z.string().optional().nullable(),
+  githubUrl: z.string().optional().nullable(),
   footerText: z.string().min(1, "Footer text is required"),
 });
 
@@ -35,7 +36,7 @@ export async function updateSettings(id: string, data: z.infer<typeof settingsSc
     where: { id },
     data: validated,
   });
-  
+
   revalidatePath("/", "layout");
   return settings;
 }
@@ -53,7 +54,7 @@ export async function updateBrandingLogos(id: string, algorhythmLogoFileId: stri
       gvpihlrLogoFileId
     },
   });
-  
+
   revalidatePath("/", "layout");
   return settings;
 }

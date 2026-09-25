@@ -68,6 +68,16 @@ export default async function ContactPage() {
                     LinkedIn
                   </a>
                 )}
+                {settings.githubUrl && (
+                  <a
+                    href={settings.githubUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-muted-foreground hover:text-tech-teal"
+                  >
+                    GitHub
+                  </a>
+                )}
               </div>
             </div>
           </CardContent>

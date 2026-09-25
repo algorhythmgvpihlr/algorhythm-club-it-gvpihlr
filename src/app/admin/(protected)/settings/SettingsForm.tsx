@@ -11,7 +11,7 @@ import { WebsiteSettings } from "@prisma/client";
 
 export function SettingsForm({ initialData }: { initialData: WebsiteSettings }) {
   const [isSaving, setIsSaving] = useState(false);
-  
+
   async function action(formData: FormData) {
     setIsSaving(true);
     try {
@@ -21,6 +21,7 @@ export function SettingsForm({ initialData }: { initialData: WebsiteSettings }) 
         whatsappUrl: formData.get("whatsappUrl") as string,
         instagramUrl: formData.get("instagramUrl") as string,
         linkedinUrl: formData.get("linkedinUrl") as string,
+        githubUrl: formData.get("githubUrl") as string,
         footerText: formData.get("footerText") as string,
       });
       toast.success("Settings saved successfully.");
@@ -58,6 +59,15 @@ export function SettingsForm({ initialData }: { initialData: WebsiteSettings }) 
             <div className="space-y-2">
               <Label className="text-zinc-300">LinkedIn URL</Label>
               <Input name="linkedinUrl" defaultValue={initialData.linkedinUrl || ""} className="bg-zinc-800 border-zinc-700 text-white" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-zinc-300">GitHub URL</Label>
+              <Input
+                name="githubUrl"
+                defaultValue={initialData.githubUrl || ""}
+                className="bg-zinc-800 border-zinc-700 text-white"
+                placeholder="https://github.com/..."
+              />
             </div>
             <div className="space-y-2">
               <Label className="text-zinc-300">Footer Text</Label>

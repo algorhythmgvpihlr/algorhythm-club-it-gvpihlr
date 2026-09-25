@@ -76,6 +76,7 @@ model WebsiteSettings {
   whatsappUrl          String?
   instagramUrl         String?
   linkedinUrl          String?
+  githubUrl            String?
   footerText           String   @default("© 2026 AlgoRhythm Club, GVPIHLR")
   algorhythmLogoFileId String?  @default("1MksFuGHsvPK1lKR2VpWwpDLBUFzVYRtA")
   gvpihlrLogoFileId    String?  @default("1eIjTCmN1tN9p7VAhwoIHm5Tv3kfBDTxl")
