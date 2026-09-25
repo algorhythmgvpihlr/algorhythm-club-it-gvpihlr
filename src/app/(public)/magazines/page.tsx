@@ -56,8 +56,16 @@ export default async function MagazinesPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {magazines.map((mag) => {
+            // Cover image continues using our secure media proxy
             const coverUrl = getMediaUrl(mag.coverImage);
-            const pdfUrl = getMediaUrl(mag.pdfUrl);
+
+            // PDF uses Google Drive preview instead of the media proxy.
+            // This opens the PDF in the browser rather than downloading it.
+            const pdfFileId = getDriveFileId(mag.pdfUrl);
+
+            const pdfUrl = pdfFileId
+              ? `https://drive.google.com/file/d/${pdfFileId}/preview`
+              : mag.pdfUrl;
 
             return (
               <Card
@@ -88,7 +96,7 @@ export default async function MagazinesPage() {
                     {mag.month} {mag.year}
                   </p>
 
-                  {/* Open PDF in new tab */}
+                  {/* Open PDF in Google Drive Preview */}
                   {pdfUrl ? (
                     <a
                       href={pdfUrl}
