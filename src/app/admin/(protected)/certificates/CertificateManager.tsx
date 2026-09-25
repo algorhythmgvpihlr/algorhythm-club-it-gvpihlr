@@ -7,12 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Upload, Trash2, FileText, Loader2, AlertCircle } from "lucide-react";
-import { uploadCertificatesZip, getEventCertificates, deleteCertificate } from "@/app/actions/certificate";
+import { Upload, Trash2, FileText, Loader2, AlertCircle, Database } from "lucide-react";
+import { getEventCertificates, deleteCertificate, uploadCertificates } from "@/app/actions/certificate";
 
 type Event = { id: string; title: string; status: string };
 type Stats = { total: number; lastUploaded: Date | null };
-type Certificate = { id: string; rollNumber: string; fileName: string; createdAt: Date };
+type Certificate = { id: string; rollNumber: string | null; studentName: string | null; fileName: string; mimeType: string; createdAt: Date };
 
 export default function CertificateManager({ 
   events, 
@@ -27,13 +27,15 @@ export default function CertificateManager({
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [search, setSearch] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadResults, setUploadResults] = useState<any>(null);
+  const [search, setSearch] = useState("");
+  const [manualRollNumber, setManualRollNumber] = useState("");
+  const [manualStudentName, setManualStudentName] = useState("");
 
   useEffect(() => {
     if (selectedEventId) {
       loadCertificates();
-      setUploadResults(null);
     } else {
       setCertificates([]);
     }
@@ -56,33 +58,49 @@ export default function CertificateManager({
     if (value) router.push(`/admin/certificates?event=${value}`);
   };
 
-  const handleZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedEventId) return;
-
-    if (!file.name.endsWith(".zip")) {
-      toast.error("Please upload a ZIP file");
-      return;
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setSelectedFiles(Array.from(e.target.files));
+      setUploadResults(null);
     }
+  };
+
+  const handleImport = async () => {
+    if (selectedFiles.length === 0 || !selectedEventId) return;
 
     setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-
+    setUploadResults(null);
+    
     try {
-      const results = await uploadCertificatesZip(selectedEventId, formData);
-      setUploadResults(results);
-      if (results.successful > 0) {
-        toast.success(`Successfully uploaded ${results.successful} certificates`);
+      const formData = new FormData();
+      selectedFiles.forEach(file => formData.append("files", file));
+      if (manualRollNumber.trim()) formData.append("rollNumber", manualRollNumber.trim());
+      if (manualStudentName.trim()) formData.append("studentName", manualStudentName.trim());
+      
+      toast.info("Uploading and processing files. This may take a few moments...");
+      
+      const result = await uploadCertificates(selectedEventId, formData);
+      
+      if (result) {
+        setUploadResults(result);
+        
+        if (result.successful > 0) {
+          toast.success(`Processed ${result.successful} certificates successfully!`);
+        } else if (result.total === 0) {
+          toast.info("No valid certificates found.");
+        } else {
+          toast.error("Failed to process any certificates.");
+        }
+        
         loadCertificates();
-      } else {
-        toast.error("No valid certificates were uploaded");
       }
     } catch (err: any) {
       toast.error(err.message || "Upload failed");
     } finally {
       setUploading(false);
-      if (e.target) e.target.value = '';
+      setSelectedFiles([]);
+      setManualRollNumber("");
+      setManualStudentName("");
     }
   };
 
@@ -99,7 +117,8 @@ export default function CertificateManager({
   };
 
   const filteredCerts = certificates.filter(c => 
-    c.rollNumber.toLowerCase().includes(search.toLowerCase())
+    (c.rollNumber?.toLowerCase() || "").includes(search.toLowerCase()) || 
+    (c.studentName?.toLowerCase() || "").includes(search.toLowerCase())
   );
 
   return (
@@ -150,44 +169,148 @@ export default function CertificateManager({
             <CardHeader>
               <CardTitle>Upload Certificates</CardTitle>
               <CardDescription className="text-zinc-400">
-                Upload a ZIP file containing PDF certificates. File names must be the participant's roll number (e.g., 22IT001.pdf).
+                Upload multiple certificates (PDF, JPG, PNG, WEBP) or a ZIP file containing them. Information will be inferred from filenames when possible.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-4">
-                <Input 
-                  type="file" 
-                  accept=".zip" 
-                  onChange={handleZipUpload}
-                  disabled={uploading}
-                  className="bg-zinc-950 border-zinc-800"
-                />
-                <Button disabled={uploading} className="bg-cyan-600 hover:bg-cyan-700 text-white shrink-0">
-                  {uploading ? <Loader2 className="animate-spin mr-2" size={16} /> : <Upload className="mr-2" size={16} />}
-                  Upload ZIP
-                </Button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="text-xs text-zinc-400 mb-1 block">Roll Number (Optional, overrides filename)</label>
+                  <Input 
+                    placeholder="e.g., 22IT001" 
+                    value={manualRollNumber}
+                    onChange={e => setManualRollNumber(e.target.value)}
+                    disabled={uploading}
+                    className="bg-zinc-950 border-zinc-800 uppercase"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-400 mb-1 block">Student Name (Optional, overrides filename)</label>
+                  <Input 
+                    placeholder="e.g., John Doe" 
+                    value={manualStudentName}
+                    onChange={e => setManualStudentName(e.target.value)}
+                    disabled={uploading}
+                    className="bg-zinc-950 border-zinc-800"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex flex-col gap-4">
+                {selectedFiles.length === 0 ? (
+                  <div>
+                    <input
+                      type="file"
+                      id="cert-upload"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,.zip"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileChange}
+                      disabled={uploading}
+                    />
+                    <label 
+                      htmlFor="cert-upload"
+                      className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300 disabled:pointer-events-none disabled:opacity-50 bg-cyan-600 text-white hover:bg-cyan-700 h-9 px-4 py-2 w-full sm:w-auto"
+                    >
+                      <Database className="mr-2" size={16} />
+                      Choose Files
+                    </label>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-md bg-zinc-950 border border-zinc-800 space-y-4">
+                    <div>
+                      <h4 className="font-medium text-zinc-200">Selected Files ({selectedFiles.length}):</h4>
+                      {selectedFiles.length === 1 ? (
+                        <>
+                          <p className="text-zinc-400 text-sm">{selectedFiles[0].name}</p>
+                          <p className="text-zinc-500 text-xs mt-1">
+                            Size: {(selectedFiles[0].size / (1024 * 1024)).toFixed(2)} MB
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-zinc-400 text-sm">
+                          {selectedFiles.length} files selected (Total size: {(selectedFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024)).toFixed(2)} MB)
+                        </p>
+                      )}
+                    </div>
+                    
+                    <div className="flex gap-3">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setSelectedFiles([])}
+                        disabled={uploading}
+                        className="border-zinc-700 text-zinc-300"
+                      >
+                        Change Files
+                      </Button>
+                      <Button 
+                        onClick={handleImport}
+                        disabled={uploading}
+                        className="bg-cyan-600 hover:bg-cyan-700 text-white"
+                      >
+                        {uploading ? <Loader2 className="animate-spin mr-2" size={16} /> : <Upload className="mr-2" size={16} />}
+                        Import Certificates
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {uploadResults && (
-                <div className="mt-4 p-4 rounded-md bg-zinc-950 border border-zinc-800">
-                  <h4 className="font-semibold mb-2">Upload Results:</h4>
-                  <ul className="text-sm space-y-1 text-zinc-300">
-                    <li>Total Files Found: {uploadResults.total}</li>
-                    <li className="text-green-400">Successfully Imported: {uploadResults.successful}</li>
-                    {uploadResults.duplicates > 0 && <li className="text-yellow-400">Duplicates Skipped: {uploadResults.duplicates}</li>}
-                    {uploadResults.invalid > 0 && <li className="text-red-400">Invalid Format: {uploadResults.invalid}</li>}
-                    {uploadResults.failed > 0 && <li className="text-red-500">Failed to Process: {uploadResults.failed}</li>}
-                  </ul>
+                <div className="mt-6 p-4 rounded-md bg-zinc-950 border border-zinc-800">
+                  <h4 className="font-semibold mb-4 text-cyan-400">Processing Results</h4>
                   
-                  {uploadResults.messages.length > 0 && (
-                    <div className="mt-3 max-h-32 overflow-y-auto text-xs text-zinc-400 border-t border-zinc-800 pt-2">
-                      {uploadResults.messages.map((msg: string, i: number) => (
-                        <div key={i} className="flex gap-2"><AlertCircle size={12} className="shrink-0 mt-0.5" /> {msg}</div>
-                      ))}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 text-center">
+                    <div className="bg-zinc-900 rounded p-2 border border-zinc-800">
+                      <div className="text-2xl font-bold text-zinc-200">{uploadResults.total}</div>
+                      <div className="text-xs text-zinc-400">Files Found</div>
+                    </div>
+                    <div className="bg-zinc-900 rounded p-2 border border-zinc-800">
+                      <div className="text-2xl font-bold text-zinc-200">{uploadResults.successful + uploadResults.duplicates + uploadResults.invalid + uploadResults.failed}</div>
+                      <div className="text-xs text-zinc-400">Processed</div>
+                    </div>
+                    <div className="bg-zinc-900 rounded p-2 border border-zinc-800">
+                      <div className="text-2xl font-bold text-green-400">{uploadResults.successful}</div>
+                      <div className="text-xs text-zinc-400">Successful</div>
+                    </div>
+                    <div className="bg-zinc-900 rounded p-2 border border-zinc-800">
+                      <div className="text-2xl font-bold text-red-400">{uploadResults.duplicates + uploadResults.invalid + uploadResults.failed}</div>
+                      <div className="text-xs text-zinc-400">Skipped</div>
+                    </div>
+                  </div>
+
+                  {uploadResults.messages && uploadResults.messages.length > 0 && (
+                    <div className="mt-4">
+                      <h5 className="text-sm font-medium text-zinc-300 mb-2">Skipped Files & Reasons</h5>
+                      <div className="overflow-x-auto border border-zinc-800 rounded-md">
+                        <table className="w-full text-sm text-left">
+                          <thead className="text-xs text-zinc-400 uppercase bg-zinc-900">
+                            <tr>
+                              <th className="px-3 py-2 font-medium">Filename</th>
+                              <th className="px-3 py-2 font-medium">Reason</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-800 bg-zinc-950">
+                            {uploadResults.messages.map((msg: string, i: number) => {
+                              const parts = msg.split(': ');
+                              const filename = parts[0];
+                              const reason = parts.slice(1).join(': ');
+                              return (
+                                <tr key={i}>
+                                  <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{filename}</td>
+                                  <td className="px-3 py-2 text-red-400">{reason || msg}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </div>
               )}
+
+
             </CardContent>
           </Card>
 
@@ -217,8 +340,10 @@ export default function CertificateManager({
                   <table className="w-full text-sm text-left">
                     <thead className="text-xs text-zinc-400 uppercase bg-zinc-950/50">
                       <tr>
+                        <th className="px-4 py-3 font-medium">Student Name</th>
                         <th className="px-4 py-3 font-medium">Roll Number</th>
                         <th className="px-4 py-3 font-medium">Filename</th>
+                        <th className="px-4 py-3 font-medium">File Type</th>
                         <th className="px-4 py-3 font-medium">Uploaded At</th>
                         <th className="px-4 py-3 font-medium text-right">Actions</th>
                       </tr>
@@ -226,10 +351,14 @@ export default function CertificateManager({
                     <tbody className="divide-y divide-zinc-800">
                       {filteredCerts.map((cert) => (
                         <tr key={cert.id} className="hover:bg-zinc-800/50 transition-colors">
-                          <td className="px-4 py-3 font-medium text-white">{cert.rollNumber}</td>
+                          <td className="px-4 py-3 text-white">{cert.studentName || <span className="text-zinc-500 italic">Not provided</span>}</td>
+                          <td className="px-4 py-3 font-medium text-white">{cert.rollNumber || <span className="text-zinc-500 italic">Not provided</span>}</td>
                           <td className="px-4 py-3 text-zinc-400 flex items-center gap-2">
                             <FileText size={14} className="text-cyan-400" />
                             {cert.fileName}
+                          </td>
+                          <td className="px-4 py-3 text-zinc-400 text-xs">
+                            {cert.mimeType?.includes("pdf") ? "PDF" : "Image"}
                           </td>
                           <td className="px-4 py-3 text-zinc-400">
                             {new Date(cert.createdAt).toLocaleDateString()}

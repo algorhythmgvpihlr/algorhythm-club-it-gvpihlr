@@ -30,8 +30,8 @@ export default async function ContactPage() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-foreground mb-1">Email</h3>
-                <a href="mailto:contact@algorhythm.com" className="text-muted-foreground hover:text-tech-teal transition-colors">
-                  contact@algorhythm.com
+                <a href="mailto:algorhythm@gvpce.ac.in" className="text-muted-foreground hover:text-tech-teal transition-colors">
+                  algorhythm@gvpce.ac.in
                 </a>
               </div>
             </div>
@@ -43,8 +43,9 @@ export default async function ContactPage() {
               <div>
                 <h3 className="text-lg font-bold text-foreground mb-1">Location</h3>
                 <p className="text-muted-foreground">
-                  IT Department, GVPIHLR<br />
-                  Visakhapatnam, Andhra Pradesh
+                  DEPARTMENT OF INFORMATION TECHNOLOGY<br />
+                  GAYATRI VIDYA PARSHIAD INSTITUE OF HIGHER LEARNING AND RESEARCH<br />
+                  Madhurawada, Kommadi, Visakhapatnam, Andhra Pradesh 530048
                 </p>
               </div>
             </div>

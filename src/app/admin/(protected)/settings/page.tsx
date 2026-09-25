@@ -1,6 +1,6 @@
 import { getSettings } from "@/app/actions/settings";
 import { SettingsForm } from "./SettingsForm";
-
+import { BrandingLogosForm } from "./BrandingLogosForm";
 export default async function AdminSettingsPage() {
   const settings = await getSettings();
 
@@ -12,6 +12,7 @@ export default async function AdminSettingsPage() {
       </div>
 
       <SettingsForm initialData={settings} />
+      <BrandingLogosForm initialData={settings} />
     </div>
   );
 }

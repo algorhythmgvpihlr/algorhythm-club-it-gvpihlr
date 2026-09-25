@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Cpu, Users, Code2, Rocket } from "lucide-react";
+import { Lightbulb, Users, Code2, TrendingUp } from "lucide-react";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -35,16 +35,16 @@ export default function AboutPage() {
             {[
               { icon: Code2, title: "Technical Excellence", desc: "Pushing boundaries with modern stacks and best practices." },
               { icon: Users, title: "Community First", desc: "A supportive environment where everyone learns and grows together." },
-              { icon: Cpu, title: "Innovation", desc: "Building solutions for real-world problems." },
-              { icon: Rocket, title: "Career Growth", desc: "Preparing members for successful careers in tech." }
+              { icon: Lightbulb, title: "Innovation", desc: "Building solutions for real-world problems." },
+              { icon: TrendingUp, title: "Career Growth", desc: "Preparing members for successful careers in tech." }
             ].map((pillar, i) => (
-              <Card key={i} className="bg-card border-border shadow-none">
+              <Card key={i} className="bg-card border-border shadow-none hover:border-tech-teal transition-colors duration-300 group">
                 <CardContent className="p-6 flex gap-4 items-start">
-                  <div className="mt-1 p-2 bg-muted rounded-md text-tech-teal border border-border">
+                  <div className="mt-1 p-2 bg-muted rounded-md text-tech-teal border border-border group-hover:bg-tech-teal/10 transition-colors duration-300">
                     <pillar.icon size={20} />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-foreground mb-2">{pillar.title}</h3>
+                    <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-tech-teal transition-colors duration-300">{pillar.title}</h3>
                     <p className="text-muted-foreground">{pillar.desc}</p>
                   </div>
                 </CardContent>

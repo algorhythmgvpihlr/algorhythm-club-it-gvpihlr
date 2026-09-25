@@ -36,10 +36,7 @@ export default function Footer({ settings }: { settings: WebsiteSettings }) {
                 </span>
               </div>
             </Link>
-            
-            <p className="text-zinc-500 max-w-sm text-sm mt-4">
-              {settings.description}
-            </p>
+
           </div>
 
           <div>

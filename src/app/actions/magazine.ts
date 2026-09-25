@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { deleteByUrlOrId } from "@/lib/google-drive";
 
 const magazineSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -37,6 +38,17 @@ export async function updateMagazine(id: string, data: z.infer<typeof magazineSc
   if (!session) throw new Error("Unauthorized");
 
   const validated = magazineSchema.parse(data);
+
+  const oldMagazine = await prisma.magazine.findUnique({ where: { id } });
+  if (oldMagazine) {
+    if (validated.coverImage !== undefined && validated.coverImage !== oldMagazine.coverImage) {
+      await deleteByUrlOrId(oldMagazine.coverImage);
+    }
+    if (validated.pdfUrl !== undefined && validated.pdfUrl !== oldMagazine.pdfUrl) {
+      await deleteByUrlOrId(oldMagazine.pdfUrl);
+    }
+  }
+
   const magazine = await prisma.magazine.update({
     where: { id },
     data: validated,
@@ -51,6 +63,12 @@ export async function updateMagazine(id: string, data: z.infer<typeof magazineSc
 export async function deleteMagazine(id: string) {
   const session = await getAuthSession();
   if (!session) throw new Error("Unauthorized");
+
+  const oldMagazine = await prisma.magazine.findUnique({ where: { id } });
+  if (oldMagazine) {
+    await deleteByUrlOrId(oldMagazine.coverImage);
+    await deleteByUrlOrId(oldMagazine.pdfUrl);
+  }
 
   await prisma.magazine.delete({ where: { id } });
   

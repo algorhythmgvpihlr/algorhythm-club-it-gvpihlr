@@ -1,39 +1,82 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Search, Download, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import {
+  Search,
+  Download,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+} from "lucide-react";
 import { verifyCertificate } from "@/app/actions/certificate";
 
-type Event = { id: string; title: string };
+type Event = {
+  id: string;
+  title: string;
+};
 
-export default function CertificateVerification({ events }: { events: Event[] }) {
+type CertificateResult = {
+  id: string;
+  studentName?: string | null;
+  rollNumber?: string | null;
+  eventTitle?: string | null;
+};
+
+export default function CertificateVerification({
+  events,
+}: {
+  events: Event[];
+}) {
   const [eventId, setEventId] = useState("");
-  const [rollNumber, setRollNumber] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [results, setResults] = useState<CertificateResult[]>([]);
   const [error, setError] = useState(false);
+
+  const selectedEvent = events.find((event) => event.id === eventId);
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!eventId || !rollNumber) return;
+
+    if (!eventId || !searchQuery.trim()) {
+      return;
+    }
 
     setIsLoading(true);
     setError(false);
-    setResult(null);
+    setResults([]);
 
     try {
-      const cert = await verifyCertificate(eventId, rollNumber);
-      if (cert) {
-        setResult(cert);
+      const certs = await verifyCertificate(
+        eventId,
+        searchQuery.trim()
+      );
+
+      if (certs && certs.length > 0) {
+        setResults(certs);
       } else {
         setError(true);
       }
     } catch (err) {
+      console.error("Certificate verification error:", err);
       setError(true);
     } finally {
       setIsLoading(false);
@@ -47,25 +90,48 @@ export default function CertificateVerification({ events }: { events: Event[] })
           <Search className="text-cyan-400" />
           Lookup Certificate
         </CardTitle>
+
         <CardDescription className="text-zinc-400">
-          Select the event you attended and enter your official roll number.
+          Select the event you attended and enter your roll number or student
+          name.
         </CardDescription>
       </CardHeader>
-      
+
       <form onSubmit={handleVerify}>
         <CardContent className="space-y-6">
+
+          {/* Step 1: Event */}
           <div className="space-y-2">
-            <Label className="text-zinc-300">Step 1: Select Event</Label>
-            <Select value={eventId} onValueChange={(val) => setEventId(val || "")} required>
+            <Label className="text-zinc-300">
+              Step 1: Select Event
+            </Label>
+
+            <Select
+              value={eventId}
+              onValueChange={(value) => {
+                setEventId(value || "");
+                setResults([]);
+                setError(false);
+              }}
+              required
+            >
               <SelectTrigger className="w-full bg-zinc-950 border-zinc-800 focus:ring-cyan-500">
-                <SelectValue placeholder="Choose an event..." />
+                <SelectValue placeholder="Choose an event...">
+                  {selectedEvent?.title || "Choose an event..."}
+                </SelectValue>
               </SelectTrigger>
+
               <SelectContent className="bg-zinc-900 border-zinc-800">
                 {events.length === 0 ? (
-                  <SelectItem value="none" disabled>No certificates available yet</SelectItem>
+                  <SelectItem value="none" disabled>
+                    No certificates available yet
+                  </SelectItem>
                 ) : (
-                  events.map(event => (
-                    <SelectItem key={event.id} value={event.id}>
+                  events.map((event) => (
+                    <SelectItem
+                      key={event.id}
+                      value={event.id}
+                    >
                       {event.title}
                     </SelectItem>
                   ))
@@ -74,57 +140,124 @@ export default function CertificateVerification({ events }: { events: Event[] })
             </Select>
           </div>
 
+          {/* Step 2: Search */}
           <div className="space-y-2">
-            <Label className="text-zinc-300">Step 2: Enter Roll Number</Label>
-            <Input 
-              placeholder="e.g., 22IT001" 
-              value={rollNumber}
-              onChange={(e) => setRollNumber(e.target.value.toUpperCase())}
+            <Label className="text-zinc-300">
+              Step 2: Enter Roll Number or Student Name
+            </Label>
+
+            <Input
+              placeholder="Roll Number/Name"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setError(false);
+              }}
               required
-              className="bg-zinc-950 border-zinc-800 focus-visible:ring-cyan-500 uppercase placeholder:normal-case"
+              className="bg-zinc-950 border-zinc-800 focus-visible:ring-cyan-500"
             />
           </div>
 
-          {result && (
-            <div className="p-4 bg-cyan-950/30 border border-cyan-800/50 rounded-lg flex flex-col items-center text-center space-y-3 animate-in fade-in slide-in-from-bottom-2">
-              <CheckCircle2 className="text-cyan-400 h-12 w-12" />
-              <div>
-                <h3 className="font-bold text-lg text-white">Certificate Found!</h3>
-                <p className="text-sm text-zinc-300 mt-1">
-                  Verified for {result.rollNumber} • {result.eventTitle}
-                </p>
+          {/* Results */}
+          {results.length > 0 && (
+            <div className="space-y-4 mt-6 animate-in fade-in slide-in-from-bottom-2">
+
+              <div className="flex items-center gap-2 mb-4 pb-2 border-b border-cyan-900/50">
+                <CheckCircle2 className="text-cyan-400 h-6 w-6" />
+
+                <h3 className="font-bold text-lg text-white">
+                  Certificate Found!
+                </h3>
+
+                <span className="bg-cyan-950 text-cyan-400 text-xs px-2 py-1 rounded ml-auto font-mono">
+                  {results.length}{" "}
+                  {results.length === 1 ? "result" : "results"}
+                </span>
               </div>
-              <Button 
-                type="button"
-                className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold mt-2"
-                onClick={() => window.open(`/api/certificates/download?id=${result.id}`, '_blank')}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Download Certificate
-              </Button>
+
+              {results.map((cert) => (
+                <div
+                  key={cert.id}
+                  className="p-4 bg-zinc-950/50 border border-zinc-800 rounded-lg flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left transition-colors hover:border-cyan-800 hover:bg-cyan-950/10"
+                >
+                  <div className="flex-1 space-y-1 w-full">
+                    <h4 className="font-bold text-zinc-100">
+                      {cert.studentName || "Not Provided"}
+                    </h4>
+
+                    <div className="flex flex-col sm:flex-row sm:gap-4 text-xs text-zinc-400">
+                      <p>
+                        Roll:{" "}
+                        <span className="text-zinc-300">
+                          {cert.rollNumber || "Not Provided"}
+                        </span>
+                      </p>
+
+                      <p className="hidden sm:block">•</p>
+
+                      <p>
+                        Event:{" "}
+                        <span className="text-zinc-300">
+                          {cert.eventTitle || selectedEvent?.title || "Not Provided"}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full sm:w-auto bg-cyan-950/30 border-cyan-800 text-cyan-300 hover:bg-cyan-900 hover:text-cyan-100"
+                    onClick={() =>
+                      window.open(
+                        `/api/certificates/download?id=${cert.id}`,
+                        "_blank"
+                      )
+                    }
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Download
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
 
+          {/* Error */}
           {error && (
             <div className="p-4 bg-red-950/30 border border-red-900/50 rounded-lg flex flex-col items-center text-center space-y-2 animate-in fade-in slide-in-from-bottom-2">
               <XCircle className="text-red-400 h-10 w-10" />
+
               <div>
-                <h3 className="font-bold text-red-200">Certificate Not Found</h3>
+                <h3 className="font-bold text-red-200">
+                  Certificate Not Found
+                </h3>
+
                 <p className="text-sm text-red-300/80 mt-1">
-                  Please check your event and roll number and try again.
+                  Please check your event and search query and try again.
                 </p>
               </div>
             </div>
           )}
 
         </CardContent>
+
         <CardFooter>
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             className="w-full bg-cyan-600 hover:bg-cyan-700 text-white transition-all"
-            disabled={isLoading || !eventId || !rollNumber || events.length === 0}
+            disabled={
+              isLoading ||
+              !eventId ||
+              !searchQuery.trim() ||
+              events.length === 0
+            }
           >
-            {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : "Verify Certificate"}
+            {isLoading ? (
+              <Loader2 className="animate-spin h-5 w-5" />
+            ) : (
+              "Verify Certificate"
+            )}
           </Button>
         </CardFooter>
       </form>

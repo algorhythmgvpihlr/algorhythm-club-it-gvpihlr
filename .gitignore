@@ -45,3 +45,4 @@ next-env.d.ts
 
 # Runtime logs
 server.log
+.env.gdrive

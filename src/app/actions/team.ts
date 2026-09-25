@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { deleteByUrlOrId } from "@/lib/google-drive";
 
 const teamMemberSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -39,6 +40,12 @@ export async function updateTeamMember(id: string, data: z.infer<typeof teamMemb
   if (!session) throw new Error("Unauthorized");
 
   const validated = teamMemberSchema.parse(data);
+
+  const oldMember = await prisma.teamMember.findUnique({ where: { id } });
+  if (oldMember && validated.photoUrl !== undefined && validated.photoUrl !== oldMember.photoUrl) {
+    await deleteByUrlOrId(oldMember.photoUrl);
+  }
+
   const member = await prisma.teamMember.update({
     where: { id },
     data: validated,
@@ -52,6 +59,11 @@ export async function updateTeamMember(id: string, data: z.infer<typeof teamMemb
 export async function deleteTeamMember(id: string) {
   const session = await getAuthSession();
   if (!session) throw new Error("Unauthorized");
+
+  const oldMember = await prisma.teamMember.findUnique({ where: { id } });
+  if (oldMember) {
+    await deleteByUrlOrId(oldMember.photoUrl);
+  }
 
   await prisma.teamMember.delete({ where: { id } });
   

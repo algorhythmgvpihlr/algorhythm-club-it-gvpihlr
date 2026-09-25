@@ -73,26 +73,27 @@ model WebsiteSettings {
   id           String   @id @default(auto()) @map("_id") @db.ObjectId
   clubName     String   @default("AlgoRhythm Club")
   description  String   @default("Technical Club of IT Department, GVPIHLR")
-  whatsappUrl  String?
-  instagramUrl String?
-  linkedinUrl  String?
-  footerText   String   @default("© 2026 AlgoRhythm Club, GVPIHLR")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  whatsappUrl          String?
+  instagramUrl         String?
+  linkedinUrl          String?
+  footerText           String   @default("© 2026 AlgoRhythm Club, GVPIHLR")
+  algorhythmLogoFileId String?  @default("1MksFuGHsvPK1lKR2VpWwpDLBUFzVYRtA")
+  gvpihlrLogoFileId    String?  @default("1eIjTCmN1tN9p7VAhwoIHm5Tv3kfBDTxl")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }
 
 model Certificate {
-  id              String   @id @default(auto()) @map("_id") @db.ObjectId
-  eventId         String   @db.ObjectId
-  rollNumber      String
-  fileName        String
-  storageKey      String   @unique
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  eventId          String   @db.ObjectId
+  rollNumber       String?
+  studentName      String?
+  fileName         String
+  storageKey       String   @unique
   originalFileName String
-  mimeType        String
-  fileSize        Int
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  @@unique([eventId, rollNumber])
+  mimeType         String
+  fileSize         Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  event            Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }

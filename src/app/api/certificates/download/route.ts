@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import path from "path";
-import fs from "fs/promises";
+import { downloadFileFromDrive } from "@/lib/google-drive";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -20,29 +19,26 @@ export async function GET(req: NextRequest) {
       return new NextResponse("Certificate not found", { status: 404 });
     }
 
-    // Resolve storage path securely
-    const STORAGE_DIR = path.join(process.cwd(), "storage", "certificates");
-    const filePath = path.join(STORAGE_DIR, cert.storageKey);
-
-    // Verify it doesn't escape STORAGE_DIR
-    const normalizedPath = path.normalize(filePath);
-    if (!normalizedPath.startsWith(STORAGE_DIR)) {
-      return new NextResponse("Invalid file path", { status: 403 });
-    }
-
-    let fileBuffer;
+    let fileBuffer: Buffer;
     try {
-      fileBuffer = await fs.readFile(normalizedPath);
+      const stream = await downloadFileFromDrive(cert.storageKey);
+      const chunks = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+      fileBuffer = Buffer.concat(chunks);
     } catch (e) {
-      console.error("Failed to read certificate file:", e);
+      console.error("Failed to read certificate from Google Drive:", e);
       return new NextResponse("File missing on server", { status: 404 });
     }
 
     const headers = new Headers();
     headers.set("Content-Type", cert.mimeType);
-    headers.set("Content-Disposition", `attachment; filename="Algorhythm_Certificate_${cert.rollNumber}.pdf"`);
+    const ext = cert.mimeType.includes("pdf") ? ".pdf" : (cert.mimeType.includes("png") ? ".png" : (cert.mimeType.includes("webp") ? ".webp" : ".jpg"));
+    const downloadName = `Algorhythm_Certificate_${cert.rollNumber || cert.studentName || 'Student'}${ext}`;
+    headers.set("Content-Disposition", `inline; filename="${downloadName}"`);
 
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(new Uint8Array(fileBuffer), {
       status: 200,
       headers,
     });

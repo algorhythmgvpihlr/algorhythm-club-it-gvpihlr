@@ -17,7 +17,7 @@ export default async function CertificatesPage() {
     orderBy: { startDate: "desc" },
     select: { id: true, title: true }
   });
-
+  console.log("Certificate Events:", events);
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 pt-32 pb-20">
       <div className="container mx-auto px-4 md:px-6">

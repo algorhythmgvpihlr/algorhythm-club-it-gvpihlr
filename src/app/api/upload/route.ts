@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
+import { uploadFileToDrive } from "@/lib/google-drive";
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,21 +25,36 @@ export async function POST(req: NextRequest) {
     const filename = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
     const uniqueFilename = `${Date.now()}-${filename}`;
 
-    const uploadDir = join(process.cwd(), "public", "uploads", folder);
+    // Map internal folder to Google Drive folder structure
+    const folderMapping: Record<string, string> = {
+      team: "Team",
+      events: "Events",
+      magazines: "Magazines",
+      misc: "Branding"
+    };
     
+    const driveFolder = folderMapping[folder] || "Branding";
+
     try {
-      await mkdir(uploadDir, { recursive: true });
-    } catch (e) {
-      // Directory might already exist
+      const { publicUrl, id } = await uploadFileToDrive(
+        buffer, 
+        uniqueFilename, 
+        file.type || "application/octet-stream", 
+        driveFolder, 
+        true // make public
+      );
+      
+      if (!publicUrl) throw new Error("Missing public URL from Drive API");
+
+      return NextResponse.json({ 
+        success: true, 
+        url: publicUrl,
+        id: id
+      });
+    } catch (uploadError: unknown) {
+      console.error("Google Drive upload failed:", uploadError);
+      return NextResponse.json({ error: "Upload failed: " + (uploadError instanceof Error ? uploadError.message : "Unknown error") }, { status: 500 });
     }
-
-    const path = join(uploadDir, uniqueFilename);
-    await writeFile(path, buffer);
-
-    return NextResponse.json({ 
-      success: true, 
-      url: `/uploads/${folder}/${uniqueFilename}` 
-    });
   } catch (error) {
     console.error("Error uploading file:", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });

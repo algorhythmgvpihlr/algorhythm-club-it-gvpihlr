@@ -3,22 +3,10 @@
 import { prisma } from "@/lib/prisma";
 import { getAuthSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import path from "path";
-import fs from "fs/promises";
 import crypto from "crypto";
 import AdmZip from "adm-zip";
-
-// Define the secure storage path outside the public directory
-const STORAGE_DIR = path.join(process.cwd(), "storage", "certificates");
-
-// Helper to ensure the storage directory exists
-async function ensureStorageDir() {
-  try {
-    await fs.mkdir(STORAGE_DIR, { recursive: true });
-  } catch (err) {
-    console.error("Failed to create storage directory:", err);
-  }
-}
+import path from "path";
+import { uploadFileToDrive, deleteFileFromDrive } from "@/lib/google-drive";
 
 export async function getCertificateStats(eventId?: string) {
   const session = await getAuthSession();
@@ -56,12 +44,11 @@ export async function deleteCertificate(id: string) {
   const cert = await prisma.certificate.findUnique({ where: { id } });
   if (!cert) throw new Error("Certificate not found");
 
-  // Delete physical file
-  const filePath = path.join(STORAGE_DIR, cert.storageKey);
+  // Delete Google Drive file
   try {
-    await fs.unlink(filePath);
+    await deleteFileFromDrive(cert.storageKey);
   } catch (err) {
-    console.error(`Failed to delete file ${filePath}:`, err);
+    console.error(`Failed to delete Google Drive file ${cert.storageKey}:`, err);
   }
 
   // Delete DB record
@@ -84,21 +71,25 @@ export async function replaceCertificate(id: string, formData: FormData) {
     throw new Error("Only PDF files are allowed");
   }
 
-  await ensureStorageDir();
-
-  // Delete old file
-  const oldPath = path.join(STORAGE_DIR, cert.storageKey);
+  // Delete old file from Google Drive
   try {
-    await fs.unlink(oldPath);
+    await deleteFileFromDrive(cert.storageKey);
   } catch (err) {
-    console.error(`Failed to delete old file ${oldPath}:`, err);
+    console.error(`Failed to delete old file ${cert.storageKey}:`, err);
   }
 
-  // Save new file
+  // Save new file to Google Drive
   const buffer = Buffer.from(await file.arrayBuffer());
-  const storageKey = crypto.randomUUID() + ".pdf";
-  const newPath = path.join(STORAGE_DIR, storageKey);
-  await fs.writeFile(newPath, buffer);
+  const uniqueName = crypto.randomUUID() + ".pdf";
+  
+  const uploadResult = await uploadFileToDrive(
+    buffer, 
+    uniqueName, 
+    "application/pdf", 
+    `Certificates/${cert.eventId}`, 
+    false // private
+  );
+  const storageKey = uploadResult.id;
 
   // Update DB
   await prisma.certificate.update({
@@ -114,36 +105,18 @@ export async function replaceCertificate(id: string, formData: FormData) {
   return { success: true };
 }
 
-export async function uploadCertificatesZip(eventId: string, formData: FormData) {
+export async function uploadCertificates(eventId: string, formData: FormData) {
   const session = await getAuthSession();
   if (!session) throw new Error("Unauthorized");
 
-  const file = formData.get("file") as File | null;
-  if (!file) throw new Error("No file provided");
+  const files = formData.getAll("files") as File[];
+  if (!files || files.length === 0) throw new Error("No files provided");
 
-  // Basic limits
-  if (file.size > 50 * 1024 * 1024) {
-    throw new Error("ZIP file exceeds 50MB limit");
-  }
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  
-  let zip;
-  try {
-    zip = new AdmZip(buffer);
-  } catch (err) {
-    throw new Error("Invalid ZIP file format");
-  }
-
-  const entries = zip.getEntries();
-  if (entries.length > 500) {
-    throw new Error("ZIP contains more than 500 files. Please batch uploads.");
-  }
-
-  await ensureStorageDir();
+  const manualRollNumber = formData.get("rollNumber") as string | null;
+  const manualStudentName = formData.get("studentName") as string | null;
 
   const results = {
-    total: entries.length,
+    total: 0,
     successful: 0,
     duplicates: 0,
     invalid: 0,
@@ -151,75 +124,190 @@ export async function uploadCertificatesZip(eventId: string, formData: FormData)
     messages: [] as string[],
   };
 
-  for (const entry of entries) {
-    if (entry.isDirectory) continue;
+  const allowedTypes = [
+    "application/pdf",
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp"
+  ];
 
-    const originalName = entry.entryName;
-    const baseName = path.basename(originalName);
+  const processingQueue: Array<{
+    buffer: Buffer;
+    originalName: string;
+    baseName: string;
+    mimeType: string;
+  }> = [];
 
-    // Skip MacOS hidden files
-    if (baseName.startsWith("._") || baseName === ".DS_Store") continue;
+  for (const file of files) {
+    if (file.name.toLowerCase().endsWith(".zip") || file.type === "application/zip" || file.type === "application/x-zip-compressed") {
+      try {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const zip = new AdmZip(buffer);
+        const entries = zip.getEntries();
+        
+        for (const entry of entries) {
+          if (entry.isDirectory) continue;
+          
+          const originalName = entry.entryName;
+          const baseName = path.basename(originalName);
+          
+          if (baseName.startsWith("._") || baseName === ".DS_Store") continue;
+          
+          results.total++;
+          
+          if (!/\.(pdf|jpg|jpeg|png|webp)$/i.test(baseName)) {
+            results.invalid++;
+            results.messages.push(`${baseName}: Unsupported file type in ZIP.`);
+            continue;
+          }
+          
+          const entryBuffer = entry.getData();
+          let mimeType = "application/octet-stream";
+          const ext = path.extname(baseName).toLowerCase();
+          if (ext === '.pdf') mimeType = 'application/pdf';
+          else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+          else if (ext === '.png') mimeType = 'image/png';
+          else if (ext === '.webp') mimeType = 'image/webp';
+          
+          processingQueue.push({
+            buffer: entryBuffer,
+            originalName,
+            baseName,
+            mimeType
+          });
+        }
+      } catch (err) {
+        results.failed++;
+        results.messages.push(`${file.name}: Failed to read ZIP file.`);
+      }
+    } else {
+      const originalName = file.name;
+      const baseName = path.basename(originalName);
 
-    // Must be PDF
-    if (!baseName.toLowerCase().endsWith(".pdf")) {
-      results.invalid++;
-      results.messages.push(`${baseName}: Invalid file type (must be .pdf)`);
-      continue;
+      if (baseName.startsWith("._") || baseName === ".DS_Store") continue;
+
+      results.total++;
+
+      if (!allowedTypes.includes(file.type) && !/\.(pdf|jpg|jpeg|png|webp)$/i.test(baseName)) {
+        results.invalid++;
+        results.messages.push(`${baseName}: Unsupported file type. Please upload PDF, JPG, JPEG, PNG, WEBP, or ZIP.`);
+        continue;
+      }
+
+      let mimeType = file.type;
+      if (!mimeType || mimeType === "application/octet-stream") {
+        const ext = path.extname(baseName).toLowerCase();
+        if (ext === '.pdf') mimeType = 'application/pdf';
+        else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+        else if (ext === '.png') mimeType = 'image/png';
+        else if (ext === '.webp') mimeType = 'image/webp';
+      }
+
+      processingQueue.push({
+        buffer: Buffer.from(await file.arrayBuffer()),
+        originalName,
+        baseName,
+        mimeType
+      });
+    }
+  }
+
+  for (const item of processingQueue) {
+    const { buffer, originalName, baseName, mimeType } = item;
+
+    let rollNumber = manualRollNumber?.trim() || null;
+    let studentName = manualStudentName?.trim() || null;
+
+    const nameWithoutExt = baseName.replace(/\.(pdf|jpg|jpeg|png|webp)$/i, "");
+    
+    const rollMatch = nameWithoutExt.match(/\b([0-9]{2}[A-Z0-9]{8})\b/i);
+    if (!rollNumber && rollMatch) {
+      rollNumber = rollMatch[1].toUpperCase();
+    }
+    
+    if (!studentName) {
+      let cleanName = nameWithoutExt.replace(/certificate_?/i, "");
+      if (rollNumber) {
+        cleanName = cleanName.replace(new RegExp(rollNumber, 'i'), "");
+      }
+      // Replace multiple spaces/underscores with single space, preserve existing spaces
+      cleanName = cleanName.replace(/_+/g, " ").replace(/\s+/g, " ").trim();
+      
+      // Remove leading hyphens or special chars that might remain
+      cleanName = cleanName.replace(/^[-_ ]+/, "");
+      
+      if (cleanName.length > 0 && !/^[\d]+$/.test(cleanName)) {
+        studentName = cleanName;
+      }
     }
 
-    const rollNumber = baseName.replace(/\.pdf$/i, "").trim().toUpperCase();
-    if (!rollNumber) {
-      results.invalid++;
-      results.messages.push(`${baseName}: Invalid roll number`);
-      continue;
-    }
-
-    // Check duplicate
-    const existing = await prisma.certificate.findUnique({
+    const existing = await prisma.certificate.findFirst({
       where: {
-        eventId_rollNumber: { eventId, rollNumber },
+        eventId,
+        fileName: baseName,
       },
     });
 
     if (existing) {
       results.duplicates++;
-      results.messages.push(`${baseName}: Certificate for ${rollNumber} already exists`);
+      results.messages.push(`${baseName}: Certificate with this name already exists`);
       continue;
     }
 
-    // Process and save
+    if (buffer.length > 15 * 1024 * 1024) { // Increased to 15MB to be safe for big images
+      results.failed++;
+      results.messages.push(`${baseName}: File exceeds 15MB limit`);
+      continue;
+    }
+
+    let storageKey: string | null = null;
     try {
-      const data = entry.getData();
-      if (data.length > 10 * 1024 * 1024) {
-        results.failed++;
-        results.messages.push(`${baseName}: File exceeds 10MB limit`);
-        continue;
-      }
-
-      const storageKey = crypto.randomUUID() + ".pdf";
-      const filePath = path.join(STORAGE_DIR, storageKey);
+      const uniqueName = crypto.randomUUID() + path.extname(baseName);
       
-      // Save physical file
-      await fs.writeFile(filePath, data);
+      const uploadResult = await uploadFileToDrive(
+        buffer, 
+        uniqueName, 
+        mimeType, 
+        `Certificates/${eventId}`, 
+        false
+      );
+      storageKey = uploadResult.id;
 
-      // Save to DB
       await prisma.certificate.create({
         data: {
           eventId,
-          rollNumber,
+          rollNumber: rollNumber || null,
+          studentName: studentName || null,
           fileName: baseName,
           originalFileName: originalName,
           storageKey,
-          mimeType: "application/pdf",
-          fileSize: data.length,
+          mimeType,
+          fileSize: buffer.length,
         },
       });
 
       results.successful++;
-    } catch (err) {
+    } catch (err: any) {
+      if (storageKey) {
+        try {
+          await deleteFileFromDrive(storageKey);
+        } catch (cleanupError) {
+          console.error("Failed to cleanup orphaned Drive file", cleanupError);
+        }
+      }
+      
       results.failed++;
-      results.messages.push(`${baseName}: Error saving file`);
-      console.error(err);
+      results.messages.push(`${baseName}: Database or upload error`);
+      
+      console.error("CERTIFICATE DB ERROR", {
+        file: baseName,
+        rollNumber,
+        studentName,
+        error: err?.message || String(err),
+        code: err?.code,
+        meta: err?.meta
+      });
     }
   }
 
@@ -227,26 +315,125 @@ export async function uploadCertificatesZip(eventId: string, formData: FormData)
   return results;
 }
 
-export async function verifyCertificate(eventId: string, rollNumber: string) {
-  const normRoll = rollNumber.trim().toUpperCase();
-  if (!normRoll) return null;
+export async function commitCertificate(data: {
+  eventId: string,
+  fileName: string,
+  originalFileName: string,
+  mimeType: string,
+  fileSize: number,
+  storageKey: string,
+  manualRollNumber?: string | null,
+  manualStudentName?: string | null
+}) {
+  const session = await getAuthSession();
+  if (!session) throw new Error("Unauthorized");
 
-  const cert = await prisma.certificate.findUnique({
+  const { eventId, fileName, originalFileName, mimeType, fileSize, storageKey, manualRollNumber, manualStudentName } = data;
+  const baseName = path.basename(fileName);
+
+  let rollNumber = manualRollNumber?.trim() || null;
+  let studentName = manualStudentName?.trim() || null;
+
+  const nameWithoutExt = baseName.replace(/\.(pdf|jpg|jpeg|png|webp)$/i, "");
+  
+  const rollMatch = nameWithoutExt.match(/\b([0-9]{2}[A-Z0-9]{8})\b/i);
+  if (!rollNumber && rollMatch) {
+    rollNumber = rollMatch[1].toUpperCase();
+  }
+  
+  if (!studentName) {
+    let cleanName = nameWithoutExt.replace(/certificate_?/i, "");
+    if (rollNumber) {
+      cleanName = cleanName.replace(new RegExp(rollNumber, 'i'), "");
+    }
+    cleanName = cleanName.replace(/_+/g, " ").replace(/\s+/g, " ").trim();
+    cleanName = cleanName.replace(/^[-_ ]+/, "");
+    
+    if (cleanName.length > 0 && !/^[\d]+$/.test(cleanName)) {
+      studentName = cleanName;
+    }
+  }
+
+  const existing = await prisma.certificate.findFirst({
     where: {
-      eventId_rollNumber: { eventId, rollNumber: normRoll },
+      eventId,
+      fileName: baseName,
+    },
+  });
+
+  if (existing) {
+    try {
+      await deleteFileFromDrive(storageKey);
+    } catch (err) {
+      console.error("Failed to delete orphaned Drive file on duplicate:", err);
+    }
+    return { success: false, duplicate: true, message: `${baseName}: Certificate with this name already exists` };
+  }
+
+  try {
+    const cert = await prisma.certificate.create({
+      data: {
+        eventId,
+        rollNumber: rollNumber || null,
+        studentName: studentName || null,
+        fileName: baseName,
+        originalFileName: originalFileName,
+        storageKey,
+        mimeType,
+        fileSize,
+      },
+    });
+
+    revalidatePath("/admin/certificates");
+    return { success: true, duplicate: false, id: cert.id };
+  } catch (err: any) {
+    try {
+      await deleteFileFromDrive(storageKey);
+    } catch (cleanupError) {
+      console.error("Failed to cleanup orphaned Drive file", cleanupError);
+    }
+    
+    console.error("CERTIFICATE DB ERROR (commit)", {
+      file: baseName,
+      error: err?.message || String(err)
+    });
+    return { success: false, duplicate: false, message: "Database creation failed" };
+  }
+}
+
+export async function verifyCertificate(eventId: string, query: string) {
+  const normQuery = query.trim();
+  if (!normQuery) return [];
+
+  const certs = await prisma.certificate.findMany({
+    where: {
+      eventId,
+      OR: [
+        { rollNumber: { equals: normQuery, mode: "insensitive" } },
+        { studentName: { contains: normQuery, mode: "insensitive" } },
+      ],
     },
     include: {
       event: { select: { title: true } },
     },
+    orderBy: {
+      studentName: "asc",
+    },
   });
 
-  if (!cert) return null;
+  console.log(
+    "[Certificate Search]",
+    normQuery,
+    "matches:",
+    certs.length,
+    certs.map((c) => c.studentName)
+  );
 
-  // We do NOT return the storageKey or full path to the client.
-  return {
-    id: cert.id, // Only use the unique ID for safe retrieval
+  return certs.map((cert) => ({
+    id: cert.id,
     rollNumber: cert.rollNumber,
+    studentName: cert.studentName,
     eventTitle: cert.event.title,
     createdAt: cert.createdAt,
-  };
+  }));
 }

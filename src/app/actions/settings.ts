@@ -20,6 +20,8 @@ export async function getSettings() {
       clubName: 'AlgoRhythm Club',
       description: 'Technical Club of IT Department, GVPIHLR',
       footerText: '© 2026 AlgoRhythm Club, GVPIHLR',
+      algorhythmLogoFileId: '1MksFuGHsvPK1lKR2VpWwpDLBUFzVYRtA',
+      gvpihlrLogoFileId: '1eIjTCmN1tN9p7VAhwoIHm5Tv3kfBDTxl',
     }
   });
 }
@@ -32,6 +34,24 @@ export async function updateSettings(id: string, data: z.infer<typeof settingsSc
   const settings = await prisma.websiteSettings.update({
     where: { id },
     data: validated,
+  });
+  
+  revalidatePath("/", "layout");
+  return settings;
+}
+
+export async function updateBrandingLogos(id: string, algorhythmLogoFileId: string, gvpihlrLogoFileId: string) {
+  const session = await getAuthSession();
+  if (!session || session.user.role !== "SUPER_ADMIN") {
+    throw new Error("Unauthorized: Only SUPER_ADMIN can modify website branding");
+  }
+
+  const settings = await prisma.websiteSettings.update({
+    where: { id },
+    data: {
+      algorhythmLogoFileId,
+      gvpihlrLogoFileId
+    },
   });
   
   revalidatePath("/", "layout");
