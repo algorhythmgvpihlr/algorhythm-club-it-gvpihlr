@@ -58,7 +58,7 @@ export default function AdminLogin() {
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@algorhythm.com"
+                placeholder="email address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -78,8 +78,8 @@ export default function AdminLogin() {
             </div>
           </CardContent>
           <CardFooter>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               className="w-full bg-cyan-600 hover:bg-cyan-700 text-white"
               disabled={isLoading}
             >
